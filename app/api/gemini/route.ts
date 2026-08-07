@@ -4,24 +4,30 @@ import { GoogleGenAI } from "@google/genai";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// This route is a direct port of get_gemini_response() from the original
-// Streamlit app.py. Same model, same request shape (text + inline image),
-// same error-handling contract: callers always get a text string back,
-// never a thrown exception.
+// The Gemini API key now lives server-side only, in the GEMINI_API_KEY
+// environment variable (set it in Vercel: Project Settings -> Environment
+// Variables). It is never sent to or read from the browser.
+const apiKey = process.env.GEMINI_API_KEY;
+
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, imageBase64, mimeType } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
-
     if (!apiKey) {
-      return NextResponse.json({ text: "Error: Missing GEMINI_API_KEY server environment variable." });
+      return NextResponse.json({
+        text: "Error: GEMINI_API_KEY is not configured on the server. Add it in your Vercel project's Environment Variables.",
+      });
     }
-    if (!imageBase64 || !prompt) {
-      return NextResponse.json({ text: "Error: Missing image or prompt." });
+
+    const { prompt, fileBase64, mimeType } = await req.json();
+
+    if (!fileBase64 || !prompt) {
+      return NextResponse.json({ text: "Error: Missing ECG file or prompt." });
     }
 
     const client = new GoogleGenAI({ apiKey });
 
+    // Gemini accepts both images (image/png, image/jpeg) and PDF documents
+    // (application/pdf) as inline data on the same "generateContent" call —
+    // same model, same call shape as before.
     const response = await client.models.generateContent({
       model: "gemini-3.6-flash",
       contents: [
@@ -32,7 +38,7 @@ export async function POST(req: NextRequest) {
             {
               inlineData: {
                 mimeType: mimeType || "image/png",
-                data: imageBase64,
+                data: fileBase64,
               },
             },
           ],
