@@ -4,13 +4,13 @@ import { GoogleGenAI } from "@google/genai";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// The Gemini API key now lives server-side only, in the GEMINI_API_KEY
-// environment variable (set it in Vercel: Project Settings -> Environment
-// Variables). It is never sent to or read from the browser.
-const apiKey = process.env.GEMINI_API_KEY;
-
 export async function POST(req: NextRequest) {
   try {
+    // The Gemini API key lives server-side only, in the GEMINI_API_KEY
+    // environment variable (set it in Vercel: Project Settings -> Environment
+    // Variables). It is never sent to or read from the browser.
+    const apiKey = process.env.GEMINI_API_KEY;
+
     if (!apiKey) {
       return NextResponse.json({
         text: "Error: GEMINI_API_KEY is not configured on the server. Add it in your Vercel project's Environment Variables.",
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     // (application/pdf) as inline data on the same "generateContent" call —
     // same model, same call shape as before.
     const response = await client.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-1.5-flash",
       contents: [
         {
           role: "user",
