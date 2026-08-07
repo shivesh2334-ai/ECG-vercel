@@ -48,7 +48,7 @@ function inferMimeType(file: File): string {
   if (file.type === "image/jpeg" || file.type === "image/png" || file.type === "application/pdf") {
     return file.type;
   }
-  return "application/pdf"; // ACCEPTED_TYPES only allows pdf/jpg/jpeg, so this is the safest default
+  return "application/pdf"; // ACCEPTED_TYPES only allows pdf/jpg/jpeg/png, so this is the safest default
 }
 
 function fileToBase64(file: File): Promise<{ data: string; mimeType: string }> {
