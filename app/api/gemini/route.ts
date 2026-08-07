@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
     if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) {
       return NextResponse.json({
-        text: `Error: Unsupported file type "${mimeType}". Please upload a PDF, JPG, or JPEG.`,
+        text: `Error: Unsupported file type "${mimeType}". Please upload a PDF, JPG, JPEG, or PNG.`,
       });
     }
 

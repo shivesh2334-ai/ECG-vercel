@@ -29,7 +29,7 @@ const ST_CHANGE_OPTIONS = [
   "Peaked T Waves",
 ];
 
-const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,image/jpeg,application/pdf";
+const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png,image/jpeg,image/png,application/pdf";
 
 type AnalysisMode = "automated" | "manual";
 
@@ -207,7 +207,7 @@ export default function Home() {
             onChange={handleUpload}
             className="w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-clinical-blue file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700"
           />
-          <p className="mt-1 text-xs text-slate-400">Accepted formats: PDF, JPG, JPEG</p>
+          <p className="mt-1 text-xs text-slate-400">Accepted formats: PDF, JPG, JPEG, PNG</p>
 
           {file && (
             <div className="mt-4">
