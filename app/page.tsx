@@ -390,7 +390,7 @@ export default function Home() {
 
                 <button
                   onClick={handleGenerateDiagnosis}
-                  disabled={loading}
+                  disabled={!imageFile || loading}
                   className="rounded-md bg-clinical-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                 >
                   {loading ? "Analyzing ECG Image + User Data..." : "Generate Diagnosis with Gemini 🤖"}
