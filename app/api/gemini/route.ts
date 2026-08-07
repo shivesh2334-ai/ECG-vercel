@@ -10,10 +10,11 @@ export const maxDuration = 60;
 // never a thrown exception.
 export async function POST(req: NextRequest) {
   try {
-    const { apiKey, prompt, imageBase64, mimeType } = await req.json();
+    const { prompt, imageBase64, mimeType } = await req.json();
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ text: "Error: Missing Gemini API key." });
+      return NextResponse.json({ text: "Error: Missing GEMINI_API_KEY server environment variable." });
     }
     if (!imageBase64 || !prompt) {
       return NextResponse.json({ text: "Error: Missing image or prompt." });

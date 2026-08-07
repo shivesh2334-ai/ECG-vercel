@@ -22,13 +22,19 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Paste a Gemini API key (get one free at https://aistudio.google.com/app/apikey) into the sidebar — the key is sent per-request to the app's own `/api/gemini` route and is never stored server-side.
+Open http://localhost:3000 after setting the Gemini API key via environment variable.
+
+Create a `.env.local` file and set:
+
+```bash
+GEMINI_API_KEY=your_gemini_api_key_here
+```
 
 ## ☁️ Deploy to Vercel
 
 1. Push this repository to GitHub.
 2. In Vercel, **Add New Project** → import `GEMINI-ECG--ANALYSIS`.
-3. Framework preset: **Next.js** (auto-detected). No environment variables are required — users supply their own API key in the UI at runtime.
+3. Framework preset: **Next.js** (auto-detected). Add `GEMINI_API_KEY` in Vercel Project Settings → Environment Variables.
 4. Deploy. `vercel.json` pins the deployment region to Mumbai (`bom1`).
 
 ## 📁 Project structure
