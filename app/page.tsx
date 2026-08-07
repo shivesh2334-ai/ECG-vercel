@@ -43,7 +43,6 @@ function fileToBase64(file: File): Promise<{ data: string; mimeType: string }> {
 
 export default function Home() {
   // --- Sidebar / configuration state ---
-  const [apiKey, setApiKey] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [clinicalContext, setClinicalContext] = useState("");
@@ -105,7 +104,7 @@ export default function Home() {
   }
 
   async function handleGenerateDiagnosis() {
-    if (!imageFile || !apiKey) return;
+    if (!imageFile) return;
     setLoading(true);
     setAiResponse(null);
     try {
@@ -126,7 +125,7 @@ export default function Home() {
       const res = await fetch("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey, prompt, imageBase64: data, mimeType }),
+        body: JSON.stringify({ prompt, imageBase64: data, mimeType }),
       });
       const json = await res.json();
       setAiResponse(json.text);
@@ -152,31 +151,7 @@ export default function Home() {
         <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              1. Configuration
-            </h2>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Google Gemini API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your API key"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-clinical-blue focus:outline-none focus:ring-1 focus:ring-clinical-blue"
-            />
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 inline-block text-xs text-clinical-blue hover:underline"
-            >
-              Get a free API key here
-            </a>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              2. Upload ECG
+              1. Upload ECG
             </h2>
             <input
               type="file"
@@ -413,19 +388,13 @@ export default function Home() {
                   The AI will analyze the image and cross-reference it with your manual findings above.
                 </div>
 
-                {!apiKey ? (
-                  <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    ⚠️ Please enter your Google Gemini API Key in the sidebar to enable AI diagnosis.
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleGenerateDiagnosis}
-                    disabled={loading}
-                    className="rounded-md bg-clinical-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                  >
-                    {loading ? "Analyzing ECG Image + User Data..." : "Generate Diagnosis with Gemini 🤖"}
-                  </button>
-                )}
+                <button
+                  onClick={handleGenerateDiagnosis}
+                  disabled={loading}
+                  className="rounded-md bg-clinical-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {loading ? "Analyzing ECG Image + User Data..." : "Generate Diagnosis with Gemini 🤖"}
+                </button>
 
                 {aiResponse && (
                   <div className="mt-4 rounded-lg border border-clinical-purple bg-clinical-purplebg p-4">
