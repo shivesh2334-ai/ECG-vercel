@@ -33,16 +33,37 @@ const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,image/jpeg,application/pdf";
 
 type AnalysisMode = "automated" | "manual";
 
+// iOS/Safari file pickers (Files app, iCloud Drive) frequently hand back an
+// empty or generic file.type (e.g. "" or "application/octet-stream") even
+// for a perfectly valid PDF or JPEG. Gemini's inline_data.mime_type field
+// only accepts a small set of real MIME types and rejects anything else
+// with an opaque "did not match the expected pattern" validation error, so
+// we always resolve the type from the file extension first and only fall
+// back to what the browser reported.
+function inferMimeType(file: File): string {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (file.type === "image/jpeg" || file.type === "image/png" || file.type === "application/pdf") {
+    return file.type;
+  }
+  return "application/pdf"; // ACCEPTED_TYPES only allows pdf/jpg/jpeg, so this is the safest default
+}
+
 function fileToBase64(file: File): Promise<{ data: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      const [header, data] = result.split(",");
-      const mimeType = header.match(/data:(.*);base64/)?.[1] || file.type || "application/octet-stream";
-      resolve({ data, mimeType });
+      const [, data] = result.split(",");
+      if (!data) {
+        reject(new Error("Could not read the selected file. Please try a different file."));
+        return;
+      }
+      resolve({ data, mimeType: inferMimeType(file) });
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
     reader.readAsDataURL(file);
   });
 }
@@ -107,13 +128,15 @@ export default function Home() {
     if (!selected) return;
     setFile(selected);
     setAiResponse(null);
-    const isImage = selected.type.startsWith("image/");
-    setFileIsImage(isImage);
-    if (isImage) {
+    try {
       const { data, mimeType } = await fileToBase64(selected);
-      setFilePreview(`data:${mimeType};base64,${data}`);
-    } else {
+      const isImage = mimeType.startsWith("image/");
+      setFileIsImage(isImage);
+      setFilePreview(isImage ? `data:${mimeType};base64,${data}` : null);
+    } catch (err) {
+      setFileIsImage(false);
       setFilePreview(null);
+      setAiResponse(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
