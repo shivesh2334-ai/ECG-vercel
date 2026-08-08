@@ -214,14 +214,13 @@ export default function Home() {
 
   const handleRotate = useCallback(
     async (degrees: number) => {
-      const src = processedPreview || filePreview;
-      if (!src) return;
-      const rotated = await rotateDataUrl(src, degrees);
+      if (!processedPreview) return;
+      const rotated = await rotateDataUrl(processedPreview, degrees);
       setFilePreview(rotated);
       setProcessedPreview(rotated);
       setCropRect(null);
     },
-    [processedPreview, filePreview]
+    [processedPreview]
   );
 
   function startCrop(e: React.MouseEvent<HTMLImageElement>) {
@@ -241,8 +240,13 @@ export default function Home() {
     setCropRect({ x, y, w, h });
   }
 
+  function endCrop() {
+    setCropStart(null);
+  }
+
   async function applyCrop() {
-    if (!cropRect || !previewRef.current || !filePreview) return;
+    const src = processedPreview || filePreview;
+    if (!cropRect || !previewRef.current || !src) return;
     const img = previewRef.current;
     const displayW = img.clientWidth;
     const displayH = img.clientHeight;
@@ -251,7 +255,7 @@ export default function Home() {
     const scaleX = naturalW / displayW;
     const scaleY = naturalH / displayH;
     const cropped = await cropDataUrl(
-      processedPreview || filePreview,
+      src,
       Math.round(cropRect.x * scaleX),
       Math.round(cropRect.y * scaleY),
       Math.round(cropRect.w * scaleX),
@@ -411,6 +415,7 @@ export default function Home() {
                       className={`w-full max-w-full rounded-lg border border-slate-200 ${isCropping ? "cursor-crosshair select-none" : ""}`}
                       onMouseDown={startCrop}
                       onMouseMove={moveCrop}
+                      onMouseUp={endCrop}
                       draggable={false}
                     />
                     {isCropping && cropRect && cropRect.w > 4 && cropRect.h > 4 && (
