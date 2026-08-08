@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import {
   calculateHeartRate,
   calculateQtc,
@@ -68,11 +68,65 @@ function fileToBase64(file: File): Promise<{ data: string; mimeType: string }> {
   });
 }
 
+/** Rotate a dataURL image by `degrees` (multiples of 90) and return a new dataURL */
+function rotateDataUrl(dataUrl: string, degrees: number): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const rad = (degrees * Math.PI) / 180;
+      const cos = Math.abs(Math.cos(rad));
+      const sin = Math.abs(Math.sin(rad));
+      const w = Math.round(img.width * cos + img.height * sin);
+      const h = Math.round(img.width * sin + img.height * cos);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.translate(w / 2, h / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.src = dataUrl;
+  });
+}
+
+/** Crop a dataURL to the given pixel rectangle */
+function cropDataUrl(
+  dataUrl: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.src = dataUrl;
+  });
+}
+
 export default function Home() {
   // --- File + patient state ---
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileIsImage, setFileIsImage] = useState(false);
+  // processedPreview holds the rotate/crop-adjusted image sent to Gemini
+  const [processedPreview, setProcessedPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Crop state ---
+  const [isCropping, setIsCropping] = useState(false);
+  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
+  const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const previewRef = useRef<HTMLImageElement>(null);
   const [age, setAge] = useState("");
   const [sex, setSex] = useState("Male");
   const [clinicalBackground, setClinicalBackground] = useState("");
@@ -128,16 +182,89 @@ export default function Home() {
     if (!selected) return;
     setFile(selected);
     setAiResponse(null);
+    setCropRect(null);
+    setIsCropping(false);
     try {
       const { data, mimeType } = await fileToBase64(selected);
       const isImage = mimeType.startsWith("image/");
       setFileIsImage(isImage);
-      setFilePreview(isImage ? `data:${mimeType};base64,${data}` : null);
+      const preview = isImage ? `data:${mimeType};base64,${data}` : null;
+      setFilePreview(preview);
+      setProcessedPreview(preview);
     } catch (err) {
       setFileIsImage(false);
       setFilePreview(null);
+      setProcessedPreview(null);
       setAiResponse(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  function handleRemoveFile() {
+    setFile(null);
+    setFilePreview(null);
+    setProcessedPreview(null);
+    setFileIsImage(false);
+    setCropRect(null);
+    setIsCropping(false);
+    setAiResponse(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  const handleRotate = useCallback(
+    async (degrees: number) => {
+      if (!processedPreview) return;
+      const rotated = await rotateDataUrl(processedPreview, degrees);
+      setFilePreview(rotated);
+      setProcessedPreview(rotated);
+      setCropRect(null);
+    },
+    [processedPreview]
+  );
+
+  function startCrop(e: React.MouseEvent<HTMLImageElement>) {
+    if (!isCropping) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setCropStart({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    setCropRect(null);
+  }
+
+  function moveCrop(e: React.MouseEvent<HTMLImageElement>) {
+    if (!isCropping || !cropStart) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.min(cropStart.x, e.clientX - rect.left);
+    const y = Math.min(cropStart.y, e.clientY - rect.top);
+    const w = Math.abs(e.clientX - rect.left - cropStart.x);
+    const h = Math.abs(e.clientY - rect.top - cropStart.y);
+    setCropRect({ x, y, w, h });
+  }
+
+  function endCrop() {
+    setCropStart(null);
+  }
+
+  async function applyCrop() {
+    const src = processedPreview || filePreview;
+    if (!cropRect || !previewRef.current || !src) return;
+    const img = previewRef.current;
+    const displayW = img.clientWidth;
+    const displayH = img.clientHeight;
+    const naturalW = img.naturalWidth;
+    const naturalH = img.naturalHeight;
+    const scaleX = naturalW / displayW;
+    const scaleY = naturalH / displayH;
+    const cropped = await cropDataUrl(
+      src,
+      Math.round(cropRect.x * scaleX),
+      Math.round(cropRect.y * scaleY),
+      Math.round(cropRect.w * scaleX),
+      Math.round(cropRect.h * scaleY)
+    );
+    setFilePreview(cropped);
+    setProcessedPreview(cropped);
+    setCropRect(null);
+    setIsCropping(false);
   }
 
   function toggleStChange(option: string) {
@@ -151,7 +278,16 @@ export default function Home() {
     setLoading(true);
     setAiResponse(null);
     try {
-      const { data, mimeType } = await fileToBase64(file);
+      let data: string;
+      let mimeType: string;
+      // If the image was rotated or cropped, use the processed dataURL
+      if (fileIsImage && processedPreview) {
+        const [header, b64] = processedPreview.split(",");
+        mimeType = header.replace("data:", "").replace(";base64", "");
+        data = b64;
+      } else {
+        ({ data, mimeType } = await fileToBase64(file));
+      }
 
       const prompt =
         mode === "automated"
@@ -201,23 +337,100 @@ export default function Home() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
             1. Upload ECG
           </h2>
-          <input
-            type="file"
-            accept={ACCEPTED_TYPES}
-            onChange={handleUpload}
-            className="w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-clinical-blue file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700"
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_TYPES}
+              onChange={handleUpload}
+              className="flex-1 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-clinical-blue file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700"
+            />
+            {file && (
+              <button
+                type="button"
+                onClick={handleRemoveFile}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-400"
+              >
+                🗑 Remove / Upload New
+              </button>
+            )}
+          </div>
           <p className="mt-1 text-xs text-slate-400">Accepted formats: PDF, JPG, JPEG, PNG</p>
 
           {file && (
             <div className="mt-4">
               {fileIsImage && filePreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={filePreview}
-                  alt="Uploaded ECG"
-                  className="w-full max-w-md rounded-lg border border-slate-200"
-                />
+                <>
+                  {/* Image action toolbar */}
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleRotate(-90)}
+                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      ↺ Rotate Left
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRotate(90)}
+                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      ↻ Rotate Right
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsCropping((v) => !v); setCropRect(null); }}
+                      className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                        isCropping
+                          ? "border-clinical-blue bg-blue-50 text-clinical-blue"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      ✂ {isCropping ? "Cancel Crop" : "Crop"}
+                    </button>
+                    {cropRect && cropRect.w > 4 && cropRect.h > 4 && (
+                      <button
+                        type="button"
+                        onClick={applyCrop}
+                        className="rounded-md border border-green-600 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100"
+                      >
+                        ✓ Apply Crop
+                      </button>
+                    )}
+                  </div>
+
+                  {isCropping && (
+                    <p className="mb-1 text-xs text-slate-500">
+                      Click and drag on the image to select a crop region, then click <strong>Apply Crop</strong>.
+                    </p>
+                  )}
+
+                  {/* Image with optional crop overlay */}
+                  <div className="relative inline-block max-w-full">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      ref={previewRef}
+                      src={filePreview}
+                      alt="Uploaded ECG"
+                      className={`w-full max-w-full rounded-lg border border-slate-200 ${isCropping ? "cursor-crosshair select-none" : ""}`}
+                      onMouseDown={startCrop}
+                      onMouseMove={moveCrop}
+                      onMouseUp={endCrop}
+                      draggable={false}
+                    />
+                    {isCropping && cropRect && cropRect.w > 4 && cropRect.h > 4 && (
+                      <div
+                        className="pointer-events-none absolute border-2 border-blue-500 bg-blue-100/30"
+                        style={{
+                          left: cropRect.x,
+                          top: cropRect.y,
+                          width: cropRect.w,
+                          height: cropRect.h,
+                        }}
+                      />
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
                   <span className="text-2xl">📄</span>
